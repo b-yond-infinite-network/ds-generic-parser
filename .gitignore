@@ -1,0 +1,7 @@
+data/output
+data/generic-parser-data
+venv
+.ipynb_checkpoints
+__pycache__
+.idea
+.DS_Store
