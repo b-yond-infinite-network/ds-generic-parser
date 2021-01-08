@@ -56,7 +56,6 @@ def extract_values(obj, key):
 
 
 def Generic_Parser(dataframe, filename):
-    # sip parser with autodetection of basic or emergency call
     import pandas as pd
     extract=[]
     extract.append(filename.split('.json')[0])
@@ -152,19 +151,18 @@ def Generic_Parser(dataframe, filename):
             elif(string==UE):
                 return 'UE'
             else:
-                return ''
+                return 'Unmapped IP'
         except(NameError) as e:
-            return ''
+            return 'Unmapped IP'
     # read type of PCAP from file if it is Emergency call or Basic call
     for i in range(len(dataframe)):
         try:
             siprequest=(extract_values(dataframe[i]['_source']['layers']['sip'], 'sip.Request-Line')[0])
         except (KeyError, IndexError) as e:
             siprequest=''
-        for emergency_code in emergency_codes:
-            if(str(emergency_code) in siprequest):
-                emergency_call=True
-                break;
+        if('sos' in siprequest or '911' in siprequest):
+            emergency_call=True
+            break;
         emergency_call=False
     #find 1st invite
 
@@ -189,9 +187,7 @@ def Generic_Parser(dataframe, filename):
             sipmethod=''
 # if the type of call is emergency, we will need an additional boolean condition in the first invite
         if(emergency_call):
-            condition=False
-            for emergency_code in emergency_codes:
-                condition=condition or (str(emergency_code) in siprequest)
+            condition=('sos' in siprequest or '911' in siprequest)
         else:
             condition=True
         # get the first invite based on condition which differes based on type of call if basic or emergency
@@ -270,14 +266,16 @@ def Generic_Parser(dataframe, filename):
         except (KeyError, IndexError) as e:
             sipcallid=''
         # Get call IDs based on type of call
+        #emergency_call=True
         if(emergency_call):
-            if( (str(sipfrom) in str(firstsipfrom) or str(firstsipfrom) in str(sipfrom)) ):
+            if( sipfrom!='' and str(sipfrom) in str(firstsipfrom)  ):
                 callids.append(sipcallid)
         else:
-            if(sipfrom in firstsipfrom or sipto in firstsipfrom or firstsipfrom in sipfrom or firstsipfrom in sipto or sipfrom in firstsipto or sipto in firstsipto or firstsipto in sipfrom or firstsipto in sipto):
+            if((sipfrom!='' and sipfrom in firstsipfrom) or (sipto!='' and sipto in firstsipfrom) or (sipfrom!='' and firstsipfrom in sipfrom) or (sipto!='' and firstsipfrom in sipto) or (sipfrom!='' and sipfrom in firstsipto) or (sipto!='' and sipto in firstsipto) or (sipfrom!='' and firstsipto in sipfrom) or (sipto!='' and firstsipto in sipto)):
                 callids.append(sipcallid)
 # Retain unique list of Call IDs
     callids=list(set(callids))
+    #print(callids)
 # Loop over the entire PCAP to get the parser output
     for i in range(0,len(dataframe)):
         try:
@@ -384,11 +382,12 @@ def Generic_Parser(dataframe, filename):
                 temp_extract=(ipnamejose(ipsrc)+'-'+sipmethod+sipstatus1+'-'+ipnamejose(ipdst))
 # Remove consecutive duplicates from the parser output
             try:
-                if(extract[-1]!=temp_extract and extract[-2]!=temp_extract and extract[-3]!=temp_extract and temp_extract!=''):
+                if(extract[-1]!=temp_extract and extract[-2]!=temp_extract and extract[-3]!=temp_extract and extract[-4]!=temp_extract and temp_extract!=''):
                     extract.append(temp_extract)
             except (KeyError, IndexError) as e:
                 extract.append(temp_extract)
     return extract
+
 
 def tshark_aggregate_gtpcause(file):
     values = []
@@ -538,20 +537,22 @@ def parse_diameter_errors(dataframe, filename):
 # Version 2 of the Diameter Parser which only shows anomalies (diameter result codes different from 2001)
     import pandas as pd
     output=[]
-    used_requests=[]
-    responses_list=[]
+    requests_output=[]
+    responses_output=[]
+    used_responses=[]
+    requests_list=[]
     requests_count=0
     responses_count=0
     unanswered_requests=0
     import pickle
-    # Get list of all possible diameter result codes in the set of pcap files
     diametercodes=pickle.load( open( "diameter_result_codes.p", "rb" ) )
     for i in range(len(dataframe)):
         # Frame Layer
         framenumber=(extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.number')[0])
         frametype=extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.protocols')[0]
-        # Check if diameter layer exists
+        # Check if ipv6 layer exists
         hasdiameter='diameter' in frametype
+        # Check msg type if it is a request
         try:
             diameter_cmd_code=(extract_values(dataframe[i]['_source']['layers']['diameter'], 'diameter.cmd.code')[0])
         except (KeyError, IndexError) as e:
@@ -570,7 +571,7 @@ def parse_diameter_errors(dataframe, filename):
             diameter_result_code=(extract_values(dataframe[i]['_source']['layers']['diameter'], 'diameter.Result-Code')[0])
         except (KeyError, IndexError) as e:
             diameter_result_code=''
-        # Find Responses which have result code different than 2001
+        # Filter
         if(hasdiameter and (diameter_cmd_code!='280') and (uncaptured_packet==False) and str(diameter_result_code)!='2001' and str(diameter_result_code)!=''):
             if(msgtype=='0x000000c0'):
                 # found a gtp request
@@ -580,15 +581,15 @@ def parse_diameter_errors(dataframe, filename):
                 responses_count=responses_count+1
                 try:
                     seq_n=(extract_values(dataframe[i]['_source']['layers']['diameter'], 'diameter.Session-Id')[0])
-                    responses_list.append([seq_n, int(framenumber)-1])
+                    requests_list.append([seq_n, int(framenumber)-1])
                 except (KeyError, IndexError) as e:
                     seq_n=''
             if(diameter_result_code!=''):
                 diametercodes.append(diameter_result_code)
-            # got list of all responses and their seq numbers
-    for response in responses_list:
-        response_seq_number=response[0]
-        index=response[1]
+            # got list of all requests and their seq numbers
+    for request in requests_list:
+        request_seq_number=request[0]
+        index=request[1]
         # Get Request info    
         try:
             request_type=(extract_values(dataframe[i]['_source']['layers']['diameter'], 'diameter.CC-Request-Type')[0])
@@ -603,7 +604,7 @@ def parse_diameter_errors(dataframe, filename):
         except (KeyError, IndexError) as e:
             request_destination_host=''
 
-        # Get Request for each response
+        # Get Response (if any)
         response_origin_host=''
         response_destination_host=''
         diameter_result_code=''
@@ -622,7 +623,7 @@ def parse_diameter_errors(dataframe, filename):
                 seq_n=''
 
             if(hasdiameter and msgtype=='0x000000c0' and seq_n==request_seq_number and framenumber not in used_responses):
-                used_requests.append(framenumber)
+                used_responses.append(framenumber)
                 try:
                     response_origin_host=(extract_values(dataframe[i]['_source']['layers']['diameter'], 'diameter.Origin-Host')[0])
                 except (KeyError, IndexError) as e:
@@ -635,17 +636,18 @@ def parse_diameter_errors(dataframe, filename):
                     diameter_result_code=(extract_values(dataframe[index]['_source']['layers']['diameter'], 'diameter.Result-Code')[0])
                 except (KeyError, IndexError) as e:
                     diameter_result_code=''
+                if(diameter_result_code=='' and response_origin_host=='' and response_destination_host==''):
+                    unanswered_requests+=1
 
                 output.append(request_origin_host+' - Request - '+response_destination_host+ ' >>> ' + ' Response - '+response_origin_host+' - Result Code = '+diameter_result_code+' - '+response_destination_host)
 
-    # Static Columns
-    # Count each diameter result code
+                from  more_itertools import unique_everseen
+                output=list(unique_everseen(output))
+        # Static Columns
     causes_counts=[]
     import collections
     for i in collections.Counter(diametercodes).values():
-        causes_counts.append(i-1)
-    # Find unanswered requests as different between number of requests and number of responses
-    unanswered_requests=responses_count-requests_count
+        causes_counts.append(i-1) 
 
     return [filename.split('.json')[0]] + [str(requests_count)]+ [str(responses_count)]+ [str(unanswered_requests)]+causes_counts+output
 
