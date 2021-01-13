@@ -1,0 +1,148 @@
+// Create a Parser.
+Extraction(framenumber: String, ts: String, extract: String)
+getDataTime(packet: Packet) = {
+ firstframetime = packet.value("frame", "frame.time")
+ if(firstframetime != "", firstframetime)
+}
+
+GetFirstINVITESOS(packet: Packet) = {
+ siprequest = packet.value("sip", "sip.Method")
+ siprequestline = packet.value("sip", "sip.Request-Line")
+ sipfrom = if(siprequest == "INVITE", packet.value("sip", "sip.from.user")).or("")
+ isSOS = siprequestline.contains("sos") | siprequestline.contains("911")
+ if((siprequest == "INVITE" & isSOS), sipfrom)
+}
+
+FirstINVITE(packet: Packet) = {
+ siprequest = packet.value("sip", "sip.Method")
+ siprequestline = packet.value("sip", "sip.Request-Line")
+ sipfrom = if(siprequest == "INVITE", packet.value("sip", "sip.from.user")).or("")
+ sipto = if(siprequest == "INVITE", packet.value("sip", "sip.to.user")).or("")
+ //ipv6src = if(siprequest == "INVITE", packet.value("ipv6", "ipv6.src")).or("")
+ //ipv6dst = if(siprequest == "INVITE", packet.value("ipv6", "ipv6.dst")).or("")
+ 
+ IpSrc1= packet.value("ip_dup1", "ip.src")
+ IpDst1= packet.value("ip_dup1", "ip.dst")
+ IpSrc2= packet.value("ip", "ip.src")
+ IpDst2= packet.value("ip", "ip.dst")
+ ipv4src1 = if(IpSrc1 != "", IpSrc1).or(IpSrc2)
+ ipv4dst1 = if(IpDst1 != "", IpDst1).or(IpDst2)
+ 
+ frametype = packet.value("frame", "frame.protocols")
+ ipv6src = if(frametype.contains("gtp"), packet.all("ipv6", "ipv6.src").get(2).or("")).orElse(if(true, packet.all("ipv6", "ipv6.src").get(1).or(""))).or("")
+ ipv6dst = if(frametype.contains("gtp"), packet.all("ipv6", "ipv6.dst").get(2).or("")).orElse(if(true, packet.all("ipv6", "ipv6.dst").get(1).or(""))).or("")
+
+ ipsrc = if(ipv6src != "", ipv6src).orElse(if(ipv4src1 != "", ipv4src1)).or("")
+ ipdst = if(ipv6dst != "", ipv6dst).orElse(if(ipv4dst1 != "", ipv4dst1)).or("")
+ isSOS = if(siprequestline.contains("sos") | siprequestline.contains("911"), "sos").or("")
+ if(siprequest == "INVITE", List(sipfrom, sipto, isSOS))
+}
+
+CollectUEIPSOS(packet: Packet) = {
+ siprequest = packet.value("sip", "sip.Method")
+ frametype = packet.value("frame", "frame.protocols")
+ ipv6src = if(frametype.contains("gtp"), packet.all("ipv6", "ipv6.src").get(2).or("")).orElse(if(true, packet.all("ipv6", "ipv6.src").get(1).or(""))).or("")
+
+ IpSrc1= packet.value("ip_dup1", "ip.src")
+ IpSrc2= packet.value("ip", "ip.src")
+ ipv4src1 = if(IpSrc1 != "", IpSrc1).or(IpSrc2)
+ //ipv4src1 = if(siprequest == "INVITE", packet.value("ip", "ip.src")).or("")
+ ipsrc = if(ipv6src != "", ipv6src).orElse(if(ipv4src1 != "", ipv4src1)).or("")
+ 
+ siprequestline = packet.value("sip", "sip.Request-Line")
+ isSOS = if(siprequestline.contains("sos") | siprequestline.contains("911"), "sos").or("")
+ ipsos = if((siprequest == "INVITE") & (isSOS == "sos"), ipsrc).or("")
+ 
+ 
+ if(ipsos != "", ipsos)
+}
+
+CollectUEIP(packet: Packet) = {
+ siprequest = packet.value("sip", "sip.Method")
+ frametype = packet.value("frame", "frame.protocols")
+ ipv6src = if(frametype.contains("gtp"), packet.all("ipv6", "ipv6.src").get(2).or("")).orElse(if(true, packet.all("ipv6", "ipv6.src").get(1).or(""))).or("")
+
+ IpSrc1= packet.value("ip_dup1", "ip.src")
+ IpSrc2= packet.value("ip", "ip.src")
+ ipv4src1 = if(IpSrc1 != "", IpSrc1).or(IpSrc2)
+ //ipv4src1 = if(siprequest == "INVITE", packet.value("ip", "ip.src")).or("")
+ ipsrc = if(ipv6src != "", ipv6src).orElse(if(ipv4src1 != "", ipv4src1)).or("")
+ if(siprequest == "INVITE", ipsrc)
+}
+
+getCallIds(sipfrom:String, sipto: String, packet: Packet) = {
+ isSIP = packet.value("frame", "frame.protocols").contains("sip")
+ GetFrom = if(isSIP, packet.value("sip", "sip.from.user")).or("")
+ GetTo = if(isSIP, packet.value("sip", "sip.to.user")).or("")
+ if((GetFrom.contains(sipfrom) | GetTo.contains(sipfrom) | GetFrom.contains(sipto) | GetTo.contains(sipto)), packet.value("sip", "sip.Call-ID"))
+}
+
+getCallIdsSOS(sipfrom:String, packet: Packet) = {
+ isSIP = packet.value("frame", "frame.protocols").contains("sip")
+ GetFrom = if(isSIP, packet.value("sip", "sip.from.user")).or("")
+ GetTo = if(isSIP, packet.value("sip", "sip.to.user")).or("")
+ if((GetFrom.contains(sipfrom) | GetTo.contains(sipfrom)), packet.value("sip", "sip.Call-ID"))
+}
+
+ipname(s: String) = if(s.startsWith("2607:f160:10:30d:ce"), "P-CSCF").orElse(if(s.startsWith("2607:f160:10:230d:ce:104"), "S-CSCF")).orElse(if(s == "2607:f160:0:2000::7", "SR-Signaling")).orElse(if(s == "2607:f160:10:6067:ce:106::6", "C-SBC")).orElse(if(s == "2607:f160:0:2000::9", "C-SBC-RAN")).orElse(if(s == "2607:f160:0:2000::c", "P-SBC")).orElse(if(s == "198.226.37.37", "P-SBC")).orElse(if(s == "UE", "UE")).orElse(if(s == "216.221.133.23", "Comtech-SBC")).orElse(if(s == "10.209.224.180", "SR")).orElse(if(s == "10.209.239.197", "P-SBC")).orElse(if(s == "10.209.239.196", "C-SBC")).orElse(if(s == "172.31.172.74", "E-SBC")).orElse(if(s == "172.31.129.70", "MSC")).orElse(if(s == "172.31.129.78", "MSC")).orElse(if(s == "172.31.133.135", "Eric_NOIS_CDMA")).orElse(if(s == "172.18.31.5", "C-SBC")).orElse(if(s == "172.18.31.6", "C-SBC")).orElse(if(s == "172.18.31.10", "C-SBC")).orElse(if(s == "172.18.31.11", "C-SBC")).orElse(if(s.startsWith("172.18.31."), "P-SBC")).orElse(if(s == "10.0.81.17", "P-CSCF02C")).orElse(if(s == "51.255.222.9", "P-CSCF02A")).orElse(if(s == "217.243.184.11", "MTAS")).orElse(if((s == "10.0.81.87") | (s == "217.243.180.5") | (s == "217.243.180.14") | (s == "217.243.182.5") | (s == "217.243.182.14") | (s == "217.243.184.5") | (s == "217.243.184.14") | (s == "10.0.194.213"), "S-CSCF")).orElse(if(s == "80.156.55.115", "UE")).orElse(if((s == "51.255.222.9") | (s == "10.0.81.15") | (s == "10.0.81.17") | (s == "10.0.194.9") | (s == "10.0.194.12"), "P-CSCF")).orElse(if(s == "51.255.221.10", "ABGF")).orElse(if((s == "62.156.169.4") | (s == "62.156.169.5") | (s == "62.156.169.6") | (s == "62.156.169.7") | (s == "62.156.169.8") | (s == "62.154.169.4") | (s == "62.154.169.5") | (s == "62.154.169.6") | (s == "62.154.169.7") | (s == "62.154.169.8"), "MRFC")).orElse(if((s == "62.154.169.36") | (s == "62.154.169.37") | (s == "62.154.169.38") | (s == "62.154.169.39") | (s == "62.154.169.40") | (s == "62.156.172.36") | (s == "62.156.172.37") | (s == "62.156.172.38") | (s == "62.156.172.39") | (s == "62.156.172.40"), "MRFP")).or("Unmapped IP")
+
+BuildExtraction(callids: Strings, UEIP: String, packet: Packet) = {
+ framenumber = packet.value("frame", "frame.number")
+ frametimestamp = packet.value("frame", "frame.time_epoch")
+ frametype = packet.value("frame", "frame.protocols")
+ isSIP = packet.value("frame", "frame.protocols").contains("sip")
+ sipmethod = packet.value("sip", "sip.Method")
+
+ //getsrcipv6 = packet.value("ipv6", "ipv6.src")
+ //getdstipv6 = packet.value("ipv6", "ipv6.dst")
+
+ //Ipv6Src1= packet.all("ipv6", "ipv6.src").get(2).or("")
+ //Ipv6Dst1= packet.all("ipv6", "ipv6.dst").get(2).or("")
+ //Ipv6Src2= packet.all("ip", "ip.src").get(1).or("")
+ //Ipv6Dst2= packet.all("ip", "ip.dst").get(1).or("")
+ //getsrcipv6 = if(Ipv6Src1 != "", Ipv6Src1).or(Ipv6Src2)
+ //getdstipv6 = if(Ipv6Dst1 != "", Ipv6Dst1).or(Ipv6Dst2)
+ getsrcipv6 = if(frametype.contains("gtp"), packet.all("ipv6", "ipv6.src").get(2).or("")).orElse(if(true, packet.all("ipv6", "ipv6.src").get(1).or(""))).or("")
+ getdstipv6 = if(frametype.contains("gtp"), packet.all("ipv6", "ipv6.dst").get(2).or("")).orElse(if(true, packet.all("ipv6", "ipv6.dst").get(1).or(""))).or("")
+
+
+ IpSrc1= packet.value("ip_dup1", "ip.src")
+ IpDst1= packet.value("ip_dup1", "ip.dst")
+ IpSrc2= packet.value("ip", "ip.src")
+ IpDst2= packet.value("ip", "ip.dst")
+ getsrcipv4 = if(IpSrc1 != "", IpSrc1).or(IpSrc2)
+ getdstipv4 = if(IpDst1 != "", IpDst1).or(IpDst2)
+
+ sipcallid = packet.value("sip", "sip.Call-ID")
+ sipfrom = if(isSIP, packet.value("sip", "sip.from.user")).or("")
+ sipto = if(isSIP, packet.value("sip", "sip.to.user")).or("")
+ statusline = if(isSIP, packet.value("sip", "sip.Status-Line")).or("")
+ statuscode = if(isSIP, packet.value("sip", "sip.Status-Code")).or("")
+ reqline = if(isSIP, packet.value("sip", "sip.Request-Line")).or("")
+ seqmethod = if(isSIP, packet.value("sip", "CSeq.method")).or("")
+ sipreason = packet.value("sip", "sip.Reason")
+ ipsrc = if(getsrcipv6 != "", if(getsrcipv6 == UEIP, "UE").or(getsrcipv6)).orElse(if(getsrcipv4 != "", if(getsrcipv4 == UEIP, "UE").or(getsrcipv4))).or("")
+ ipdst = if(getdstipv6 != "", if(getdstipv6 == UEIP, "UE").or(getdstipv6)).orElse(if(getdstipv4 != "", if(getdstipv4 == UEIP, "UE").or(getdstipv4))).or("")
+ extract = if((sipmethod != "OPTIONS") & (sipmethod != "options") &((statuscode != "") | (sipmethod != "")) & (callids.contains(sipcallid)), if((sipreason != "") & ((sipmethod == "BYE") | statuscode.startsWith("4") | statuscode.startsWith("5") | statuscode.startsWith("6")), ipname(ipsrc) + "-" + sipmethod + statuscode + "&&" + sipreason + "-" + ipname(ipdst)).or(ipname(ipsrc) + "-" + sipmethod + statuscode + "-" + ipname(ipdst))).or("")
+ if(extract != "", Extraction(framenumber, frametimestamp, extract))
+}
+
+
+s1 = Stream(currentDir)
+filetime = s1.collectFirst(getDataTime).or("")
+dataFirstINVITESOS = s1.collectFirst(GetFirstINVITESOS).or("")
+dataFirstINVITE = s1.collectFirst(FirstINVITE).or(List(""))
+UIIPSOS = s1.collectFirst(CollectUEIPSOS).or("")
+UEIP = if(UIIPSOS != "", UIIPSOS).or(s1.collectFirst(CollectUEIP).or(""))
+CallIDs = s1.collect(if(dataFirstINVITESOS != "", getCallIdsSOS(dataFirstINVITESOS)).or(getCallIds(dataFirstINVITE.get(1).or(""), dataFirstINVITE.get(2).or("")))).list
+extract = s1.collect(BuildExtraction(CallIDs, UEIP)).list
+ReportElement(ReportAttribute: String, UIbehavior: String)
+FileMeta(filetime: ReportElement)
+ReportUIcss = ""
+Result(fileMeta = FileMeta(ReportElement(filetime.split("\.").get(1).or("ffffffff"), ReportUIcss)), list = extract)
+--------
+Metadata(timestamp: String)
+ReportingOutput(metadata = Metadata(input.fileMeta.filetime.ReportAttribute), extractions = input.list)
+-------
+f(r: Extraction) = r.extract
+input.list.map(f)
