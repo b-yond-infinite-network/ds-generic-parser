@@ -419,8 +419,12 @@ def parse_diameter(dataframe, filename, diametercodes):
     unanswered_requests = 0
     for i in range(len(dataframe)):
         # Frame Layer
-        framenumber = (extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.number')[0])
-        frametype = extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.protocols')[0]
+        try:
+            framenumber = (extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.number')[0])
+            frametype = extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.protocols')[0]
+        except (KeyError, IndexError) as e:
+            framenumber = ''
+            frametype = ''
         # Check if ipv6 layer exists
         hasdiameter = 'diameter' in frametype
         # Check msg type if it is a request
@@ -542,8 +546,12 @@ def parse_diameter_errors(dataframe, filename, diametercodes):
     unanswered_requests = 0
     for i in range(len(dataframe)):
         # Frame Layer
-        framenumber = (extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.number')[0])
-        frametype = extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.protocols')[0]
+        try:
+            framenumber = (extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.number')[0])
+            frametype = extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.protocols')[0]
+        except (KeyError, IndexError) as e:
+            framenumber = ''
+            frametype = ''
         # Check if ipv6 layer exists
         hasdiameter = 'diameter' in frametype
         # Check msg type if it is a request
@@ -661,8 +669,13 @@ def parse_gtp(dataframe, filename, gtp_causes):
 
     for i in range(len(dataframe)):
         # Frame Layer
-        framenumber = (extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.number')[0])
-        frametype = extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.protocols')[0]
+        try:
+            framenumber = (extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.number')[0])
+            frametype = extract_values(dataframe[i]['_source']['layers']['frame'], 'frame.protocols')[0]
+        except (KeyError, IndexError) as e:
+            framenumber = ''
+            frametype = ''
+
         # Check if ipv6 layer exists
         hasgtp = 'gtpv2' in frametype
         # Check msg type if it is a request
