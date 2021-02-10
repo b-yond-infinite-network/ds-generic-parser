@@ -6,7 +6,7 @@ from pathlib import Path
 
 def convert_pcap(output_folder_path: Path, pcap_file: Path):
     out_file = output_folder_path / (pcap_file.stem + '.json')
-    return subprocess.run(f'cd "{pcap_file.parent.absolute()}"; tshark -r "{pcap_file.name}" -T json >"{out_file.absolute()}"', capture_output=True, shell=True)
+    return subprocess.run(f'tshark -r "{pcap_file.absolute()}" -T json >"{out_file.absolute()}"', capture_output=True, shell=True)
 
 
 def read_parse_sip(json_file: Path):

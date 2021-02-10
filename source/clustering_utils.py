@@ -36,7 +36,9 @@ def result_fun(df, clusters, silhouette):
 
 
 def transform_data(idf, replace):
-    idf.fillna(replace, inplace=True)
+    if replace is not None:
+        return idf.fillna(replace)
+    return idf
 
 
 def min_max_normalization(value, x, y, xnew, ynew):
